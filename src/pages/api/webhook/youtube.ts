@@ -30,24 +30,38 @@ export const POST: APIRoute = async ({ request }) => {
         let skippedCount = 0;
 
         for (const data of items) {
+            // Map alternate field names from n8n (like in Sample.txt) to expected ones
+            const channelName = data.channelName || data.channelTitle;
+            const url = data.url || data.videoUrl;
+
+            let videoId = data.videoId;
+            if (!videoId && url) {
+                try {
+                    const parsedUrl = new URL(url);
+                    videoId = parsedUrl.searchParams.get("v");
+                } catch (e) {
+                    // Ignore parsing errors
+                }
+            }
+
             // Validate we actually received the required fields for this item
-            if (!data.videoId || !data.title || !data.channelName) {
+            if (!videoId || !data.title || !channelName) {
                 console.warn("[Webhook] Skipping item with missing fields:", data);
                 skippedCount++;
                 continue;
             }
 
             // 3. Check if we already have this video in the database to avoid crashing on duplicate inserts
-            const existing = await db.select().from(YoutubeFeed).where(eq(YoutubeFeed.videoId, data.videoId));
+            const existing = await db.select().from(YoutubeFeed).where(eq(YoutubeFeed.videoId, videoId));
 
             if (existing.length === 0) {
                 // 4. Insert the new video row into Astro DB
                 await db.insert(YoutubeFeed).values({
-                    videoId: data.videoId,
-                    channelName: data.channelName,
+                    videoId: videoId,
+                    channelName: channelName,
                     title: data.title,
-                    url: data.url || `https://www.youtube.com/watch?v=${data.videoId}`, // Fallback if n8n doesn't send URL directly
-                    thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${data.videoId}/hqdefault.jpg`, // Fallback thumbnail
+                    url: url || `https://www.youtube.com/watch?v=${videoId}`, // Fallback if n8n doesn't send URL directly
+                    thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`, // Fallback thumbnail
                     publishedAt: data.publishedAt || new Date().toISOString()
                 });
                 insertedCount++;
