@@ -16,6 +16,12 @@ pnpm-debug.log*
 # environment variables
 .env
 .env.production
+.env.example
+
+# local database and spreadsheets
+*.db
+*.csv
+nginx_brainrot.conf
 
 # macOS-specific files
 .DS_Store
