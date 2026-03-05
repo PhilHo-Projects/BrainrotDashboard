@@ -1,0 +1,10 @@
+---
+import DashboardLayout from "../layouts/DashboardLayout.astro";
+import BentoGrid from "../components/islands/BentoGrid.svelte";
+---
+
+<DashboardLayout title="Command Center">
+  <div class="p-4">
+    <BentoGrid client:load />
+  </div>
+</DashboardLayout>

@@ -1,0 +1,11 @@
+$ astro db execute db/seed.ts
+Error while executing file:
+
+SQLITE_ERROR: no such table: Ticker
+  Location:
+    D:\WebDev\NewsHUB\command-center\node_modules\@astrojs\db\dist\core\cli\commands\execute\index.js:59:29
+  Stack trace:
+    at cmd (file:///D:/WebDev/NewsHUB/command-center/node_modules/@astrojs/db/dist/core/cli/commands/execute/index.js:59:29)
+    at async db (file:///D:/WebDev/NewsHUB/command-center/node_modules/astro/dist/cli/db/index.js:21:3)
+    at async cli (file:///D:/WebDev/NewsHUB/command-center/node_modules/astro/dist/cli/index.js:238:5)
+error: script "db:seed" exited with code 1
