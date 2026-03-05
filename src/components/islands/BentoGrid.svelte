@@ -419,9 +419,10 @@
       </div>
 
     </div>
+    </div>
     
     <!-- List Content Area -->
-    <div class="p-4 flex-1 overflow-y-auto">
+    <div class="p-4 flex-1 overflow-y-auto w-full relative">
       {#if activeFeedCategory === 'youtube'}
         <div class="space-y-4">
           <!-- Live YouTube Videos -->
