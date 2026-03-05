@@ -5,6 +5,9 @@ import db from "@astrojs/db";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  security: {
+    checkOrigin: false
+  },
   base: '/BrainrotDashboard',
   output: "server",
   adapter: node({ mode: "standalone" }),
