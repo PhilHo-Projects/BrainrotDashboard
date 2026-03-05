@@ -11,6 +11,7 @@
   let checkingStream = true;
   let activeFeedCategory = 'youtube';
   let youtubeVideos: any[] = [];
+  let showExpandedFeed = false;
 
   let sparklines = [
     { name: "S&P 500",   symbol: "^GSPC",   price: 0, changeAmount: 0, changePercent: 0, data: [], meta: null, loading: true },
@@ -56,7 +57,26 @@
       // Shallow-clone to decouple from sparklines array mutations
       displayTicker = { ...sl };
       selectedTicker = sl;
+      showExpandedFeed = false; // close grid if opening ticker
     }
+  }
+
+  function handleVideoAction(videoId: string, action: 'hide' | 'save') {
+    // Optimistic UI updates
+    if (action === 'hide') {
+      youtubeVideos = youtubeVideos.filter(v => v.videoId !== videoId);
+    } else if (action === 'save') {
+      youtubeVideos = youtubeVideos.map(v => 
+        v.videoId === videoId ? { ...v, isSaved: !v.isSaved } : v
+      );
+    }
+
+    const baseUrl = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL;
+    fetch(`${baseUrl}/api/feed/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ videoId, action })
+    }).catch(err => console.error("Action error", err));
   }
 
   onMount(() => {
@@ -131,63 +151,11 @@
       {/each}
     </div>
 
-    <!-- STREAM / DETAIL BENTO -->
-    <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col">
-
-      <!-- Stream header (always visible) -->
-      <div class="flex items-center justify-between p-3 border-b border-white/5 bg-[#1a1a24] select-none">
-        <div class="flex items-center gap-3">
-          <span class="text-sm font-semibold tracking-wider text-slate-300 uppercase">Stream · HasanAbi</span>
-          {#if streamIsLive && !checkingStream && !selectedTicker}
-            <span class="flex items-center gap-1.5 text-xs text-[#4ade80] font-mono">
-              <span class="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse"></span> LIVE
-            </span>
-          {/if}
-        </div>
-        {#if selectedTicker}
-          <span class="text-[10px] text-slate-500 font-mono uppercase tracking-widest">stream hidden — audio still playing</span>
-        {/if}
-      </div>
-
-      <!-- Stream video: unmounts when ticker selected, hidden iframe keeps audio alive -->
-      {#if !selectedTicker}
-        <div class="w-full aspect-video bg-black overflow-hidden relative flex items-center justify-center" transition:slide={{ duration: 250 }}>
-          {#if checkingStream}
-            <div class="text-white/40 font-mono text-xs tracking-widest uppercase animate-pulse">Checking connection...</div>
-          {:else if streamIsLive}
-            <iframe
-              title="HasanAbi Twitch Stream"
-              src="https://player.twitch.tv/?channel=hasanabi&parent=philippeho.popnux.com&parent=localhost"
-              height="100%" width="100%" allowfullscreen
-              class="w-full h-full border-0 absolute inset-0"
-            ></iframe>
-          {:else}
-            <div class="flex flex-col items-center justify-center gap-4 text-white/30 p-8 text-center border border-white/5 rounded-xl bg-white/[0.02]">
-              <svg class="w-12 h-12 opacity-50 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              <div class="flex flex-col gap-1">
-                <span class="font-bold text-sm tracking-widest uppercase text-white/50">Stream Offline</span>
-                <span class="text-xs font-mono opacity-80">Waiting for broadcast to resume</span>
-              </div>
-            </div>
-          {/if}
-        </div>
-      {/if}
-
-      <!-- Hidden iframe keeps Twitch audio alive while detail panel is showing -->
-      {#if selectedTicker && streamIsLive}
-        <div class="absolute w-0 h-0 overflow-hidden pointer-events-none" aria-hidden="true">
-          <iframe title="stream-audio" src="https://player.twitch.tv/?channel=hasanabi&parent=philippeho.popnux.com&parent=localhost" width="1" height="1" class="border-0"></iframe>
-        </div>
-      {/if}
-
-      <!-- INLINE TICKER DETAIL
-           IMPORTANT: {#if selectedTicker} controls visibility/transitions.
-           Template reads use `displayTicker` (frozen shallow-clone) which is
-           NEVER null after first open, so .meta/.price are safe during slide-out. -->
+    <!-- MAIN LEFT COLUMN STACK: Ticker Detail -> Expanded Grid -> Twitch Stream -->
+    <div class="flex flex-col gap-4">
+      <!-- 1. INLINE TICKER DETAIL (Pushes content down) -->
       {#if selectedTicker}
-        <div class="flex flex-col" transition:slide={{ duration: 250 }}>
+        <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col" transition:slide={{ duration: 250 }}>
           <div class="p-5 md:p-6 flex flex-col gap-5">
 
             <!-- Header -->
@@ -278,13 +246,126 @@
         </div>
       {/if}
 
+      <!-- 2. EXPANDED VIDEO FEED GRID -->
+      {#if showExpandedFeed}
+        <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col p-5" transition:slide={{ duration: 300 }}>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold text-white tracking-wide">Subscription Feed</h2>
+            <button on:click={() => showExpandedFeed = false} class="text-slate-400 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5">✕</button>
+          </div>
+          
+          {#if youtubeVideos.length === 0}
+            <div class="text-sm text-slate-500 font-mono text-center my-20">No videos tracked yet.</div>
+          {:else}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {#each youtubeVideos as video}
+                <div class="flex flex-col gap-2 group relative">
+                  <!-- Thumbnail Container -->
+                  <div class="w-full aspect-video bg-white/5 rounded-xl border border-white/10 relative overflow-hidden group-hover:border-white/20 transition-colors">
+                    <a href={video.url} target="_blank" class="block w-full h-full relative cursor-pointer">
+                      <img src={video.thumbnail} alt={video.title} class="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                      <!-- Saved Badge -->
+                      {#if video.isSaved}
+                        <div class="absolute bottom-2 right-2 bg-[#38bdf8] text-white p-1 rounded-md shadow-lg pointer-events-none">
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm11 1H6v8l4-2 4 2V6z" clip-rule="evenodd"></path></svg>
+                        </div>
+                      {/if}
+                    </a>
+                    
+                    <!-- Action Overlay Buttons (Top Right) -->
+                    <div class="absolute top-2 right-2 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 translate-x-2 group-hover:translate-x-0">
+                      <!-- Hide / Remove -->
+                      <button 
+                        on:click|preventDefault={() => handleVideoAction(video.videoId, 'hide')}
+                        class="bg-black/70 hover:bg-black/90 text-white w-7 h-7 rounded-sm flex items-center justify-center backdrop-blur-md transition-all shadow-xl border border-white/10"
+                        title="Remove from feed"
+                      >
+                       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                      </button>
+                      <!-- Watch Later -->
+                      <button 
+                        on:click|preventDefault={() => handleVideoAction(video.videoId, 'save')}
+                        class="bg-black/70 hover:bg-[#38bdf8]/90 text-white w-7 h-7 rounded-sm flex items-center justify-center backdrop-blur-md transition-all shadow-xl border border-white/10"
+                        title="Watch later"
+                      >
+                       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"></path></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <!-- Text Details -->
+                  <div class="flex flex-col px-1">
+                    <h3 class="text-sm font-semibold leading-snug text-slate-100 group-hover:text-white line-clamp-2 mt-1">{video.title}</h3>
+                    <div class="flex items-center justify-between mt-1">
+                      <span class="text-[12px] text-slate-400 truncate">{video.channelName}</span>
+                      <span class="text-[10px] text-slate-500 font-mono shrink-0 whitespace-nowrap pl-2">
+                        {new Date(video.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- 3. TWITCH STREAM (Always bottom, pushed down safely) -->
+      <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col">
+        <div class="flex items-center justify-between p-3 border-b border-white/5 bg-[#1a1a24] select-none">
+          <div class="flex items-center gap-3">
+            <span class="text-sm font-semibold tracking-wider text-slate-300 uppercase">Stream · HasanAbi</span>
+            {#if streamIsLive && !checkingStream}
+              <span class="flex items-center gap-1.5 text-xs text-[#4ade80] font-mono">
+                <span class="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse"></span> LIVE
+              </span>
+            {/if}
+          </div>
+        </div>
+        
+        <div class="w-full aspect-video bg-black overflow-hidden relative flex items-center justify-center">
+          {#if checkingStream}
+            <div class="text-white/40 font-mono text-xs tracking-widest uppercase animate-pulse">Checking connection...</div>
+          {:else if streamIsLive}
+            <iframe
+              title="HasanAbi Twitch Stream"
+              src="https://player.twitch.tv/?channel=hasanabi&parent=philippeho.popnux.com&parent=localhost"
+              height="100%" width="100%" allowfullscreen
+              class="w-full h-full border-0 absolute inset-0"
+            ></iframe>
+          {:else}
+            <div class="flex flex-col items-center justify-center gap-4 text-white/30 p-8 text-center border border-white/5 rounded-xl bg-white/[0.02]">
+              <svg class="w-12 h-12 opacity-50 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <div class="flex flex-col gap-1">
+                <span class="font-bold text-sm tracking-widest uppercase text-white/50">Stream Offline</span>
+                <span class="text-xs font-mono opacity-80">Waiting for broadcast to resume</span>
+              </div>
+            </div>
+          {/if}
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- RIGHT COLUMN: FEEDS SIDEBAR (always open) -->
-  <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col w-80 2xl:w-[26rem]">
-    <!-- Tab Row: 4 Clickable Categories with Badges -->
-    <div class="grid grid-cols-4 p-3 border-b border-white/5 bg-[#1a1a24] gap-2 select-none">
+  <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-row w-[20rem] 2xl:w-[26rem]">
+    
+    <!-- Expanded View Toggle (Thin left col) -->
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div 
+      on:click={() => { showExpandedFeed = !showExpandedFeed; selectedTicker = null; }}
+      class="w-8 shrink-0 bg-[#1a1a24]/50 border-r border-white/5 flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors group"
+      title="Toggle Expanded Grid"
+    >
+      <div class="h-10 w-1 rounded-full bg-slate-600 transition-all group-hover:bg-white group-hover:h-12 {showExpandedFeed ? 'bg-[#38bdf8] h-12' : ''}"></div>
+    </div>
+
+    <!-- Feeds Content Box -->
+    <div class="flex flex-col flex-1 overflow-hidden">
+      <!-- Tab Row: 4 Clickable Categories with Badges -->
+      <div class="grid grid-cols-4 p-3 border-b border-white/5 bg-[#1a1a24] gap-2 select-none">
       
       <!-- YouTube Tab -->
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -294,7 +375,9 @@
         class="relative flex flex-col items-center justify-center p-2 rounded-lg cursor-pointer transition-all {activeFeedCategory === 'youtube' ? 'bg-[#38bdf8]/10 text-[#38bdf8] border border-[#38bdf8]/20' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent'}"
       >
         {#if youtubeVideos.length > 0}
-          <span class="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg border border-[#1a1a24] z-10">{youtubeVideos.length}</span>
+          <span class="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg border border-[#1a1a24] z-10">
+            {youtubeVideos.length === 50 ? '50+' : youtubeVideos.length}
+          </span>
         {/if}
         <svg class="w-5 h-5 mb-1" viewBox="0 0 24 24" fill="currentColor"><path d="M21.582,6.186c-0.23-0.86-0.908-1.538-1.768-1.768C18.254,4,12,4,12,4S5.746,4,4.186,4.418c-0.86,0.23-1.538,0.908-1.768,1.768C2,7.746,2,12,2,12s0,4.254,0.418,5.814c0.23,0.86,0.908,1.538,1.768,1.768C5.746,20,12,20,12,20s6.254,0,7.814-0.418c0.86-0.23,1.538-0.908,1.768-1.768C22,16.254,22,12,22,12S22,7.746,21.582,6.186z M10,15.464V8.536L16,12L10,15.464z"/></svg>
         <span class="text-[10px] font-bold uppercase tracking-wider hidden sm:block">Video</span>
@@ -346,12 +429,17 @@
             <div class="text-xs text-slate-500 font-mono text-center mt-10">No videos yet. Send webhook to /BrainrotDashboard/api/webhook/youtube</div>
           {/if}
           {#each youtubeVideos as video}
-            <a href={video.url} target="_blank" class="flex gap-3 group cursor-pointer transition-all hover:bg-white/5 p-2 -mx-2 rounded-xl">
+            <a href={video.url} target="_blank" class="flex gap-3 group cursor-pointer transition-all hover:bg-white/5 p-2 -mx-2 rounded-xl relative">
+              <!-- Read Marker if Saved -->
+              {#if video.isSaved}
+                <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#38bdf8] rounded-r-full"></div>
+              {/if}
               <!-- 16:9 Thumbnail -->
               <div class="w-28 sm:w-36 aspect-video bg-white/5 rounded-lg flex-shrink-0 border border-white/10 relative overflow-hidden">
                 <img src={video.thumbnail} alt={video.title} class="absolute inset-0 w-full h-full object-cover" />
                 <!-- Play Icon Overlay -->
-                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur-sm">
+                <!-- Reduced backdrop-blur to prevent extreme fuzziness while retaining visual distinction -->
+                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px]">
                   <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                 </div>
               </div>

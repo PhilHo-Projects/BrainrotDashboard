@@ -19,6 +19,8 @@ const YoutubeFeed = defineTable({
     url: column.text(),
     thumbnail: column.text(),
     publishedAt: column.text(), // We'll store ISO strings like "2026-03-04T12:00:00Z" for simplicity
+    isHidden: column.boolean({ default: false }),
+    isSaved: column.boolean({ default: false }),
   }
 });
 
