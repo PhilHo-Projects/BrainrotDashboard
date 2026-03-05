@@ -349,23 +349,23 @@
   </div>
 
   <!-- RIGHT COLUMN: FEEDS SIDEBAR (always open) -->
-  <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-row w-[20rem] 2xl:w-[26rem]">
+  <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col w-[20rem] 2xl:w-[26rem]">
     
-    <!-- Expanded View Toggle (Thin left col) -->
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div 
-      on:click={() => { showExpandedFeed = !showExpandedFeed; selectedTicker = null; }}
-      class="w-8 shrink-0 bg-[#1a1a24]/50 border-r border-white/5 flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-colors group"
-      title="Toggle Expanded Grid"
-    >
-      <div class="h-10 w-1 rounded-full bg-slate-600 transition-all group-hover:bg-white group-hover:h-12 {showExpandedFeed ? 'bg-[#38bdf8] h-12' : ''}"></div>
-    </div>
+    <!-- Top Row: Expanded View Toggle + Tabs Row -->
+    <div class="flex flex-row items-stretch border-b border-white/5 bg-[#1a1a24]">
+      <!-- Expanded View Toggle (Slim, only in header) -->
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div 
+        on:click={() => { showExpandedFeed = !showExpandedFeed; selectedTicker = null; }}
+        class="w-8 shrink-0 flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors group border-r border-white/5 bg-black/10"
+        title="Toggle Expanded Grid"
+      >
+        <div class="h-6 w-1 rounded-full bg-slate-600 transition-all group-hover:bg-white group-hover:h-8 {showExpandedFeed ? 'bg-[#38bdf8] h-8' : ''}"></div>
+      </div>
 
-    <!-- Feeds Content Box -->
-    <div class="flex flex-col flex-1 overflow-hidden">
       <!-- Tab Row: 4 Clickable Categories with Badges -->
-      <div class="grid grid-cols-4 p-3 border-b border-white/5 bg-[#1a1a24] gap-2 select-none">
+      <div class="grid grid-cols-4 p-3 gap-2 select-none flex-1">
       
       <!-- YouTube Tab -->
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -469,7 +469,6 @@
           {/each}
         </div>
       {/if}
-    </div>
     </div>
   </div>
 
