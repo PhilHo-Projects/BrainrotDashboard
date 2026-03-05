@@ -61,7 +61,8 @@
 
   onMount(() => {
     sparklines.forEach((sl, i) => {
-      fetch(`/api/market-data?symbol=${sl.symbol}`)
+      const baseUrl = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL;
+      fetch(`${baseUrl}/api/market-data?symbol=${sl.symbol}`)
         .then(res => res.json())
         .then(data => {
           if (!data.error) {
@@ -93,7 +94,8 @@
       });
 
     // Fetch the stored YouTube videos from local SQLite DB
-    fetch("/api/feed/youtube")
+    const baseUrl = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL;
+    fetch(`${baseUrl}/api/feed/youtube`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -155,7 +157,7 @@
           {:else if streamIsLive}
             <iframe
               title="HasanAbi Twitch Stream"
-              src="https://player.twitch.tv/?channel=hasanabi&parent=localhost"
+              src="https://player.twitch.tv/?channel=hasanabi&parent=philippeho.popnux.com&parent=localhost"
               height="100%" width="100%" allowfullscreen
               class="w-full h-full border-0 absolute inset-0"
             ></iframe>
@@ -176,7 +178,7 @@
       <!-- Hidden iframe keeps Twitch audio alive while detail panel is showing -->
       {#if selectedTicker && streamIsLive}
         <div class="absolute w-0 h-0 overflow-hidden pointer-events-none" aria-hidden="true">
-          <iframe title="stream-audio" src="https://player.twitch.tv/?channel=hasanabi&parent=localhost" width="1" height="1" class="border-0"></iframe>
+          <iframe title="stream-audio" src="https://player.twitch.tv/?channel=hasanabi&parent=philippeho.popnux.com&parent=localhost" width="1" height="1" class="border-0"></iframe>
         </div>
       {/if}
 
@@ -341,7 +343,7 @@
         <div class="space-y-4">
           <!-- Live YouTube Videos -->
           {#if youtubeVideos.length === 0}
-            <div class="text-xs text-slate-500 font-mono text-center mt-10">No videos yet. Send webhook to /api/webhook/youtube</div>
+            <div class="text-xs text-slate-500 font-mono text-center mt-10">No videos yet. Send webhook to /BrainrotDashboard/api/webhook/youtube</div>
           {/if}
           {#each youtubeVideos as video}
             <a href={video.url} target="_blank" class="flex gap-3 group cursor-pointer transition-all hover:bg-white/5 p-2 -mx-2 rounded-xl">
