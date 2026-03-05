@@ -31,8 +31,8 @@ jobs:
             git reset --hard origin/main
 
             # Install dependencies and build
-            bun install
-            bun run build
+            ~/.bun/bin/bun install
+            ~/.bun/bin/bun run build
 
             # Check if PM2 process exists, if not start it, else restart
             pm2 describe BrainrotDashboard > /dev/null
