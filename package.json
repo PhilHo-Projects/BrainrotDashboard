@@ -4,8 +4,8 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
-    "start": "node ./dist/server/entry.mjs",
+    "build": "ASTRO_DATABASE_FILE=local.db astro build",
+    "start": "ASTRO_DATABASE_FILE=local.db node ./dist/server/entry.mjs",
     "db:push": "astro db push",
     "db:seed": "astro db execute db/seed.ts",
     "preview": "astro preview",
