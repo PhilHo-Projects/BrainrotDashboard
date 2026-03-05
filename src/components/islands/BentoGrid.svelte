@@ -470,6 +470,7 @@
         </div>
       {/if}
     </div>
+    </div>
   </div>
 
 </div>
