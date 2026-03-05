@@ -5,6 +5,7 @@ import db from "@astrojs/db";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  base: '/BrainrotDashboard',
   output: "server",
   adapter: node({ mode: "standalone" }),
   integrations: [svelte(), db()],
