@@ -358,13 +358,13 @@
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div 
         on:click={() => { showExpandedFeed = !showExpandedFeed; selectedTicker = null; }}
-        class="w-8 shrink-0 flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors group border-r border-white/5 bg-black/10"
+        class="w-5 shrink-0 flex items-center justify-center cursor-pointer hover:bg-[#38bdf8]/10 transition-colors group border-r border-white/5 bg-black/20"
         title="Toggle Expanded Grid"
       >
         {#if showExpandedFeed}
-          <svg class="w-4 h-4 text-slate-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+          <svg class="w-3 h-3 text-slate-600 group-hover:text-[#38bdf8] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" /></svg>
         {:else}
-          <svg class="w-4 h-4 text-slate-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+          <svg class="w-3 h-3 text-slate-600 group-hover:text-[#38bdf8] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
         {/if}
       </div>
 
@@ -432,30 +432,50 @@
             <div class="text-xs text-slate-500 font-mono text-center mt-10">No videos yet. Send webhook to /BrainrotDashboard/api/webhook/youtube</div>
           {/if}
           {#each youtubeVideos as video}
-            <a href={video.url} target="_blank" class="flex gap-3 group cursor-pointer transition-all hover:bg-white/5 p-2 -mx-2 rounded-xl relative">
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <!-- svelte-ignore a11y-click-events-have-key-events -->
+            <div class="flex gap-3 group cursor-pointer transition-all duration-200 hover:bg-[#38bdf8]/5 hover:border-[#38bdf8]/10 p-2 -mx-2 rounded-xl relative border border-transparent">
               <!-- Read Marker if Saved -->
               {#if video.isSaved}
                 <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#38bdf8] rounded-r-full"></div>
               {/if}
               <!-- 16:9 Thumbnail -->
-              <div class="w-28 sm:w-36 aspect-video bg-white/5 rounded-lg flex-shrink-0 border border-white/10 relative overflow-hidden">
+              <a href={video.url} target="_blank" class="w-28 sm:w-36 aspect-video bg-white/5 rounded-lg flex-shrink-0 border border-white/10 relative overflow-hidden block">
                 <img src={video.thumbnail} alt={video.title} class="absolute inset-0 w-full h-full object-cover" />
                 <!-- Play Icon Overlay -->
-                <!-- Reduced backdrop-blur to prevent extreme fuzziness while retaining visual distinction -->
                 <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px]">
                   <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                 </div>
-              </div>
+              </a>
               
               <!-- Text Info -->
-              <div class="flex flex-col gap-1 flex-1 py-0.5">
-                <h3 class="text-sm font-semibold leading-tight text-white group-hover:text-[#38bdf8] transition-colors line-clamp-2">{video.title}</h3>
+              <div class="flex flex-col gap-1 flex-1 py-0.5 min-w-0">
+                <a href={video.url} target="_blank" class="text-sm font-semibold leading-tight text-white group-hover:text-[#38bdf8] transition-colors line-clamp-2">{video.title}</a>
                 <span class="text-[11px] text-slate-400 mt-1">{video.channelName}</span>
-                <span class="text-[10px] text-slate-500 font-mono">
-                   {new Date(video.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </span>
+                <div class="flex items-center justify-between mt-auto">
+                  <span class="text-[10px] text-slate-500 font-mono">
+                     {new Date(video.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <!-- Action Buttons -->
+                  <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                    <button 
+                      on:click|preventDefault|stopPropagation={() => handleVideoAction(video.videoId, 'save')}
+                      class="w-6 h-6 rounded flex items-center justify-center transition-all duration-150 hover:scale-110 active:scale-95 {video.isSaved ? 'bg-[#38bdf8]/20 text-[#38bdf8]' : 'bg-white/5 text-slate-500 hover:bg-[#38bdf8]/20 hover:text-[#38bdf8]'}"
+                      title="Watch later"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+                    </button>
+                    <button 
+                      on:click|preventDefault|stopPropagation={() => handleVideoAction(video.videoId, 'hide')}
+                      class="w-6 h-6 rounded flex items-center justify-center bg-white/5 text-slate-500 hover:bg-red-500/20 hover:text-red-400 transition-all duration-150 hover:scale-110 active:scale-95"
+                      title="Remove from feed"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                  </div>
+                </div>
               </div>
-            </a>
+            </div>
           {/each}
         </div>
       {:else}
