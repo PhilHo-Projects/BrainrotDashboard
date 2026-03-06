@@ -97,18 +97,23 @@
 </script>
 
 <div class="flex flex-col bg-[#111118] border border-white/5 rounded-xl p-3 overflow-hidden h-[100px] transition-colors hover:border-white/10 cursor-pointer relative group">
-    <!-- Header: Name -->
-    <span class="text-xs font-semibold text-slate-300 mb-0.5">{name}</span>
+    <!-- Header: Name & Change % -->
+    <div class="flex justify-between items-start mb-0.5 relative z-10 w-full">
+        <span class="text-xs font-semibold text-slate-300">{name}</span>
+        
+        {#if historicalData.length > 0}
+            <span class="text-[11px] font-mono leading-none font-medium px-1.5 py-0.5 rounded-sm {changeAmount >= 0 ? 'text-[#4ade80] bg-[#4ade80]/10' : 'text-[#f87171] bg-[#f87171]/10'}">
+                {changeAmount >= 0 ? '↑' : '↓'} {Math.abs(changePercent).toFixed(2)}%
+            </span>
+        {/if}
+    </div>
     
-    <!-- Price & Change -->
+    <!-- Price -->
     <div class="flex flex-col gap-0.5 z-10 relative">
         {#if historicalData.length === 0}
             <span class="text-xs font-mono text-slate-400 animate-pulse mt-1">Loading API...</span>
         {:else}
             <span class="text-base font-mono font-semibold tracking-tight text-white leading-none">${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-            <span class="text-[11px] font-mono leading-none {changeAmount >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}">
-                {changeAmount >= 0 ? '↗' : '↘'} {Math.abs(changePercent).toFixed(2)}%
-            </span>
         {/if}
     </div>
 

@@ -361,7 +361,11 @@
         class="w-8 shrink-0 flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors group border-r border-white/5 bg-black/10"
         title="Toggle Expanded Grid"
       >
-        <div class="h-6 w-1 rounded-full bg-slate-600 transition-all group-hover:bg-white group-hover:h-8 {showExpandedFeed ? 'bg-[#38bdf8] h-8' : ''}"></div>
+        {#if showExpandedFeed}
+          <svg class="w-4 h-4 text-slate-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+        {:else}
+          <svg class="w-4 h-4 text-slate-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+        {/if}
       </div>
 
       <!-- Tab Row: 4 Clickable Categories with Badges -->
@@ -390,7 +394,6 @@
         on:click={() => activeFeedCategory = 'news'} 
         class="relative flex flex-col items-center justify-center p-2 rounded-lg cursor-pointer transition-all {activeFeedCategory === 'news' ? 'bg-[#38bdf8]/10 text-[#38bdf8] border border-[#38bdf8]/20' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent'}"
       >
-        <span class="absolute -top-1.5 -right-1.5 bg-[#38bdf8] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg border border-[#1a1a24] z-10">12</span>
         <svg class="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
         <span class="text-[10px] font-bold uppercase tracking-wider hidden sm:block">News</span>
       </div>
@@ -402,7 +405,6 @@
         on:click={() => activeFeedCategory = 'social'} 
         class="relative flex flex-col items-center justify-center p-2 rounded-lg cursor-pointer transition-all {activeFeedCategory === 'social' ? 'bg-[#38bdf8]/10 text-[#38bdf8] border border-[#38bdf8]/20' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent'}"
       >
-        <span class="absolute -top-1.5 -right-1.5 bg-purple-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg border border-[#1a1a24] z-10">44</span>
         <svg class="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" /></svg>
         <span class="text-[10px] font-bold uppercase tracking-wider hidden sm:block">Social</span>
       </div>
