@@ -348,8 +348,9 @@
     </div>
   </div>
 
-  <!-- RIGHT COLUMN: FEEDS SIDEBAR (always open) -->
-  <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col w-[20rem] 2xl:w-[26rem]">
+  <!-- RIGHT COLUMN: FEEDS SIDEBAR (always open unless expanded feed is shown) -->
+  {#if !showExpandedFeed}
+  <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col w-[20rem] 2xl:w-[26rem] shrink-0" transition:slide={{ axis: 'x', duration: 300 }}>
     
     <!-- Top Row: Expanded View Toggle + Tabs Row -->
     <div class="flex flex-row items-stretch border-b border-white/5 bg-[#1a1a24]">
@@ -494,5 +495,6 @@
       {/if}
     </div>
   </div>
+  {/if}
 
 </div>
