@@ -126,10 +126,10 @@
   });
 </script>
 
-<div class="flex flex-row gap-4 max-w-[1600px] mx-auto text-white relative">
+<div class="flex flex-row justify-center w-full max-w-[1600px] mx-auto text-white relative">
 
   <!-- LEFT DASHBOARD AREA -->
-  <div class="flex-1 flex flex-col gap-4 overflow-hidden">
+  <div class="w-[calc(100%-21rem)] 2xl:w-[calc(100%-27rem)] shrink-0 flex flex-col gap-4 overflow-hidden">
 
     <!-- TOP ROW: 7 SPARKLINES -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
@@ -348,9 +348,9 @@
     </div>
   </div>
 
-  <!-- RIGHT COLUMN: FEEDS SIDEBAR (always open unless expanded feed is shown) -->
+  <!-- RIGHT COLUMN: FEEDS SIDEBAR (slides away to smoothly recenter the main feed without lag) -->
   {#if !showExpandedFeed}
-  <div class="bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col w-[20rem] 2xl:w-[26rem] shrink-0" transition:slide={{ axis: 'x', duration: 300 }}>
+  <div class="ml-4 bg-[#111118] border border-white/5 rounded-xl overflow-hidden flex flex-col w-[20rem] 2xl:w-[26rem] shrink-0" transition:slide={{ axis: 'x', duration: 350 }}>
     
     <!-- Top Row: Expanded View Toggle + Tabs Row -->
     <div class="flex flex-row items-stretch border-b border-white/5 bg-[#1a1a24]">
