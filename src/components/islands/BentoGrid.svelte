@@ -3,17 +3,110 @@
   import { slide } from "svelte/transition";
   import { onMount } from "svelte";
 
+  type TimeRange = "1D" | "5D" | "1M" | "6M" | "YTD" | "1Y";
+
+  type MarketMeta = {
+    prevClose: number;
+    open: number;
+    volume: number;
+    low: number;
+    high: number;
+    yearLow: number;
+    yearHigh: number;
+  };
+
+  type MarketPayload = {
+    symbol: string;
+    range: TimeRange;
+    price: number;
+    changeAmount: number;
+    changePercent: number;
+    rangeBase: number;
+    historicalData: number[];
+    meta: MarketMeta;
+  };
+
+  type SparklineTicker = {
+    name: string;
+    symbol: string;
+    price: number;
+    changeAmount: number;
+    changePercent: number;
+    data: number[];
+    meta: MarketMeta | null;
+    loading: boolean;
+  };
+
+  type DetailTicker = SparklineTicker & {
+    rangeBase: number;
+    range: TimeRange;
+  };
+
+  type CompareSeries = {
+    symbol: string;
+    name: string;
+    color: string;
+    normalizedData: number[];
+    changePercent: number;
+  };
+
+  type ChartLine = {
+    key: string;
+    name: string;
+    color: string;
+    data: number[];
+    fill: boolean;
+    changePercent: number;
+  };
+
+  const TIMEFRAME_OPTIONS: TimeRange[] = ["1D", "5D", "1M", "6M", "YTD", "1Y"];
+  const RANGE_SUMMARY: Record<TimeRange, string> = {
+    "1D": "Intraday move",
+    "5D": "Past 5 trading days",
+    "1M": "Past month",
+    "6M": "Past 6 months",
+    "YTD": "Year to date",
+    "1Y": "Past 12 months"
+  };
+  const SYMBOL_LABELS: Record<string, string> = {
+    "^GSPC": "S&P 500",
+    "^DJI": "Dow Jones",
+    "^IXIC": "Nasdaq",
+    "GC=F": "Gold",
+    "CL=F": "Crude Oil",
+    "BTC-USD": "Bitcoin",
+    "ETH-USD": "Ethereum"
+  };
+  const COMPARISON_COLORS: Record<string, string> = {
+    "^GSPC": "#38bdf8",
+    "^IXIC": "#f59e0b",
+    "^DJI": "#a78bfa",
+    "BTC-USD": "#f97316",
+    "ETH-USD": "#22d3ee"
+  };
+  const PRIMARY_COMPARE_COLOR = "#f8fafc";
+  const baseUrl = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL;
+
   // selectedTicker → controls {#if} visibility (can be null, triggers outro)
   // displayTicker  → frozen data snapshot for template reads (never null once set, safe during outro)
-  let selectedTicker: any = null;
-  let displayTicker: any = null;
+  let selectedTicker: SparklineTicker | null = null;
+  let displayTicker: DetailTicker | null = null;
   let streamIsLive = false;
   let checkingStream = true;
   let activeFeedCategory = 'youtube';
   let youtubeVideos: any[] = [];
   let showExpandedFeed = false;
+  let activeRange: TimeRange = "1D";
+  let detailLoading = false;
+  let compareLoading = false;
+  let detailError = "";
+  let compareEnabled = false;
+  let comparisonSeries: CompareSeries[] = [];
+  let marketDataCache: Record<string, MarketPayload> = {};
+  let detailRequestToken = 0;
+  let compareRequestToken = 0;
 
-  let sparklines = [
+  let sparklines: SparklineTicker[] = [
     { name: "S&P 500",   symbol: "^GSPC",   price: 0, changeAmount: 0, changePercent: 0, data: [], meta: null, loading: true },
     { name: "Dow Jones", symbol: "^DJI",    price: 0, changeAmount: 0, changePercent: 0, data: [], meta: null, loading: true },
     { name: "Nasdaq",    symbol: "^IXIC",   price: 0, changeAmount: 0, changePercent: 0, data: [], meta: null, loading: true },
@@ -23,7 +116,7 @@
     { name: "Ethereum",  symbol: "ETH-USD", price: 0, changeAmount: 0, changePercent: 0, data: [], meta: null, loading: true }
   ];
 
-  function formatVolume(vol: number) {
+  function formatVolume(vol?: number) {
     if (!vol) return "0";
     if (vol >= 1000000000) return (vol / 1000000000).toFixed(2) + "B";
     if (vol >= 1000000)    return (vol / 1000000).toFixed(2) + "M";
@@ -31,34 +124,221 @@
     return vol.toLocaleString();
   }
 
-  function getSvgPath(data: number[], isArea: boolean) {
+  function getSvgPath(data: number[], min: number, max: number, isArea: boolean) {
     if (!data || data.length < 2) return "";
-    const min = Math.min(...data);
-    const max = Math.max(...data);
     const range = max - min || 1;
-    const pad = range * 0.05;
-    const lo = min - pad;
-    const span = range + pad * 2;
     const points = data.map((v, i) => {
       const x = (i / (data.length - 1)) * 1000;
-      const y = 250 - (((v - lo) / span) * 250);
+      const y = 250 - (((v - min) / range) * 250);
       return `${x},${y}`;
     });
     const line = `M ${points.join(" L ")}`;
     return isArea ? `${line} L 1000,250 L 0,250 Z` : line;
   }
 
-  function toggleTicker(sl: any) {
+  function getTickerName(symbol: string) {
+    return SYMBOL_LABELS[symbol] ?? sparklines.find((ticker) => ticker.symbol === symbol)?.name ?? symbol;
+  }
+
+  function getCacheKey(symbol: string, range: TimeRange) {
+    return `${symbol}::${range}`;
+  }
+
+  function normalizeSeries(data: number[], base: number) {
+    if (!data.length) return [];
+    const safeBase = base || data[0] || 1;
+    return data.map((value) => ((value - safeBase) / safeBase) * 100);
+  }
+
+  function getComparisonSymbols(symbol: string) {
+    if (symbol === "BTC-USD" || symbol === "ETH-USD") {
+      return ["BTC-USD", "ETH-USD"].filter((candidate) => candidate !== symbol);
+    }
+
+    return ["^GSPC", "^IXIC", "^DJI"].filter((candidate) => candidate !== symbol);
+  }
+
+  function getChartBounds(seriesCollection: number[][], baseline?: number) {
+    const values = seriesCollection.flat().filter((value) => Number.isFinite(value));
+    if (typeof baseline === "number" && Number.isFinite(baseline)) {
+      values.push(baseline);
+    }
+
+    if (!values.length) {
+      return { min: 0, max: 1 };
+    }
+
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+
+    if (min === max) {
+      const pad = Math.abs(min) * 0.05 || 1;
+      min -= pad;
+      max += pad;
+    } else {
+      const pad = (max - min) * 0.08;
+      min -= pad;
+      max += pad;
+    }
+
+    return { min, max };
+  }
+
+  function getChartOffset(value: number, min: number, max: number) {
+    const range = max - min || 1;
+    const clamped = Math.min(max, Math.max(min, value));
+    return ((max - clamped) / range) * 100;
+  }
+
+  function toDetailTicker(payload: MarketPayload, name: string): DetailTicker {
+    return {
+      name,
+      symbol: payload.symbol,
+      price: payload.price,
+      changeAmount: payload.changeAmount,
+      changePercent: payload.changePercent,
+      data: payload.historicalData,
+      meta: payload.meta,
+      loading: false,
+      rangeBase: payload.rangeBase,
+      range: payload.range
+    };
+  }
+
+  function toCompareSeries(payload: MarketPayload): CompareSeries {
+    return {
+      symbol: payload.symbol,
+      name: getTickerName(payload.symbol),
+      color: COMPARISON_COLORS[payload.symbol] ?? "#38bdf8",
+      normalizedData: normalizeSeries(payload.historicalData, payload.rangeBase),
+      changePercent: payload.changePercent
+    };
+  }
+
+  async function fetchMarketData(symbol: string, range: TimeRange = "1D") {
+    const cacheKey = getCacheKey(symbol, range);
+    if (marketDataCache[cacheKey]) {
+      return marketDataCache[cacheKey];
+    }
+
+    const response = await fetch(`${baseUrl}/api/market-data?symbol=${encodeURIComponent(symbol)}&range=${range}`);
+    const payload = await response.json();
+
+    if (!response.ok || payload.error) {
+      throw new Error(payload.message || payload.error || `Failed to fetch ${symbol}`);
+    }
+
+    marketDataCache = {
+      ...marketDataCache,
+      [cacheKey]: payload
+    };
+
+    return payload as MarketPayload;
+  }
+
+  async function loadTickerDetail(symbol: string, name: string, range: TimeRange) {
+    const token = ++detailRequestToken;
+    detailLoading = true;
+    detailError = "";
+
+    try {
+      const payload = await fetchMarketData(symbol, range);
+      if (token !== detailRequestToken || selectedTicker?.symbol !== symbol) return;
+      displayTicker = toDetailTicker(payload, name);
+    } catch (error: any) {
+      if (token !== detailRequestToken) return;
+      detailError = error?.message || "Failed to load chart";
+    } finally {
+      if (token === detailRequestToken) {
+        detailLoading = false;
+      }
+    }
+  }
+
+  async function loadComparisonSeries(symbol: string, range: TimeRange) {
+    const symbols = getComparisonSymbols(symbol);
+    const token = ++compareRequestToken;
+    comparisonSeries = [];
+    compareLoading = symbols.length > 0;
+
+    if (!symbols.length) {
+      compareLoading = false;
+      return;
+    }
+
+    try {
+      const payloads = await Promise.all(symbols.map((compareSymbol) => fetchMarketData(compareSymbol, range)));
+      if (token !== compareRequestToken || selectedTicker?.symbol !== symbol || !compareEnabled) return;
+      comparisonSeries = payloads.map((payload) => toCompareSeries(payload));
+    } catch (error) {
+      if (token !== compareRequestToken) return;
+      console.error("Failed to load comparison series", error);
+      comparisonSeries = [];
+    } finally {
+      if (token === compareRequestToken) {
+        compareLoading = false;
+      }
+    }
+  }
+
+  function resetExpandedTickerState() {
+    activeRange = "1D";
+    detailLoading = false;
+    compareLoading = false;
+    detailError = "";
+    compareEnabled = false;
+    comparisonSeries = [];
+  }
+
+  function toggleTicker(sl: SparklineTicker) {
     if (selectedTicker && selectedTicker.symbol === sl.symbol) {
+      detailRequestToken += 1;
+      compareRequestToken += 1;
       selectedTicker = null;
       // displayTicker intentionally NOT cleared here — it stays non-null
       // so template reads during the slide-out outro never hit null.meta
+      resetExpandedTickerState();
     } else {
       // Shallow-clone to decouple from sparklines array mutations
-      displayTicker = { ...sl };
+      resetExpandedTickerState();
+      displayTicker = {
+        ...sl,
+        rangeBase: sl.meta?.prevClose ?? (sl.price - sl.changeAmount),
+        range: "1D"
+      };
       selectedTicker = sl;
       showExpandedFeed = false; // close grid if opening ticker
+
+      if (!sl.data.length || !sl.meta) {
+        void loadTickerDetail(sl.symbol, sl.name, "1D");
+      }
     }
+  }
+
+  async function handleRangeChange(range: TimeRange) {
+    if (!selectedTicker) return;
+    if (activeRange === range && !detailError) return;
+
+    activeRange = range;
+    await Promise.all([
+      loadTickerDetail(selectedTicker.symbol, selectedTicker.name, range),
+      compareEnabled ? loadComparisonSeries(selectedTicker.symbol, range) : Promise.resolve()
+    ]);
+  }
+
+  async function toggleCompareOverlay() {
+    if (!selectedTicker) return;
+
+    if (compareEnabled) {
+      compareRequestToken += 1;
+      compareEnabled = false;
+      compareLoading = false;
+      comparisonSeries = [];
+      return;
+    }
+
+    compareEnabled = true;
+    await loadComparisonSeries(selectedTicker.symbol, activeRange);
   }
 
   function handleVideoAction(videoId: string, action: 'hide' | 'save') {
@@ -79,28 +359,88 @@
     }).catch(err => console.error("Action error", err));
   }
 
-  onMount(() => {
-    sparklines.forEach((sl, i) => {
-      const baseUrl = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL;
-      fetch(`${baseUrl}/api/market-data?symbol=${sl.symbol}`)
-        .then(res => res.json())
-        .then(data => {
-          if (!data.error) {
-            sparklines[i].price = data.price;
-            sparklines[i].changeAmount = data.changeAmount;
-            sparklines[i].changePercent = data.changePercent;
-            sparklines[i].data = data.historicalData;
-            sparklines[i].meta = data.meta;
-            sparklines[i].loading = false;
-            sparklines = [...sparklines];
-            // Keep displayTicker in sync if this is the selected one
-            if (displayTicker && displayTicker.symbol === sparklines[i].symbol) {
-              displayTicker = { ...sparklines[i] };
-            }
+  $: absoluteBaseline = displayTicker?.rangeBase ?? ((displayTicker?.price ?? 0) - (displayTicker?.changeAmount ?? 0));
+  $: detailCaption = compareEnabled
+    ? `${RANGE_SUMMARY[activeRange]} · normalized compare`
+    : RANGE_SUMMARY[activeRange];
+  $: compareButtonLabel = compareLoading
+    ? "Loading compare..."
+    : compareEnabled
+      ? "Hide compare"
+      : (displayTicker?.symbol === "BTC-USD" || displayTicker?.symbol === "ETH-USD")
+        ? "Compare BTC / ETH"
+        : "Compare Big 3";
+  $: chartLines = !displayTicker
+    ? []
+    : compareEnabled
+      ? ([
+          {
+            key: displayTicker.symbol,
+            name: displayTicker.name,
+            color: PRIMARY_COMPARE_COLOR,
+            data: normalizeSeries(displayTicker.data ?? [], absoluteBaseline),
+            fill: false,
+            changePercent: displayTicker.changePercent ?? 0
+          },
+          ...comparisonSeries.map((series) => ({
+            key: series.symbol,
+            name: series.name,
+            color: series.color,
+            data: series.normalizedData,
+            fill: false,
+            changePercent: series.changePercent
+          }))
+        ] as ChartLine[])
+      : ([
+          {
+            key: displayTicker.symbol,
+            name: displayTicker.name,
+            color: (displayTicker.changeAmount ?? 0) >= 0 ? "#4ade80" : "#f87171",
+            data: displayTicker.data ?? [],
+            fill: true,
+            changePercent: displayTicker.changePercent ?? 0
           }
-        })
-        .catch(err => console.error("Failed to fetch", sl.symbol, err));
-    });
+        ] as ChartLine[]);
+  $: baselineValue = compareEnabled ? 0 : absoluteBaseline;
+  $: chartBounds = getChartBounds(chartLines.map((line) => line.data), baselineValue);
+  $: baselineTop = getChartOffset(baselineValue, chartBounds.min, chartBounds.max);
+  $: baselineLabel = compareEnabled
+    ? "0.00%"
+    : `${activeRange === "1D" ? "Prev close" : "Range start"}: $${absoluteBaseline.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  $: lowMetricLabel = activeRange === "1D" ? "Low" : "Range Low";
+  $: highMetricLabel = activeRange === "1D" ? "High" : "Range High";
+  $: primaryAreaFill = (displayTicker?.changeAmount ?? 0) >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)";
+
+  onMount(() => {
+    Promise.allSettled(sparklines.map((sl) => fetchMarketData(sl.symbol, "1D")))
+      .then((results) => {
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            const data = result.value;
+            sparklines[index] = {
+              ...sparklines[index],
+              price: data.price,
+              changeAmount: data.changeAmount,
+              changePercent: data.changePercent,
+              data: data.historicalData,
+              meta: data.meta,
+              loading: false
+            };
+
+            if (displayTicker && displayTicker.symbol === sparklines[index].symbol && activeRange === "1D") {
+              displayTicker = toDetailTicker(data, sparklines[index].name);
+            }
+          } else {
+            console.error("Failed to fetch", sparklines[index].symbol, result.reason);
+            sparklines[index] = {
+              ...sparklines[index],
+              loading: false
+            };
+          }
+        });
+
+        sparklines = [...sparklines];
+      });
 
     fetch("https://decapi.me/twitch/uptime/hasanabi")
       .then(res => res.text())
@@ -114,7 +454,6 @@
       });
 
     // Fetch the stored YouTube videos from local SQLite DB
-    const baseUrl = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL;
     fetch(`${baseUrl}/api/feed/youtube`)
       .then(res => res.json())
       .then(data => {
@@ -170,7 +509,7 @@
                 </div>
               </div>
               <!-- svelte-ignore a11y-click-events-have-key-events -->
-              <button on:click={() => { selectedTicker = null; }} class="text-slate-400 hover:text-white p-2 text-lg hover:bg-white/5 rounded-full transition-colors w-9 h-9 flex items-center justify-center shrink-0">✕</button>
+              <button on:click={() => { detailRequestToken += 1; compareRequestToken += 1; selectedTicker = null; resetExpandedTickerState(); }} class="text-slate-400 hover:text-white p-2 text-lg hover:bg-white/5 rounded-full transition-colors w-9 h-9 flex items-center justify-center shrink-0">✕</button>
             </div>
 
             <div class="bg-[#1a1a24] rounded-xl border border-white/5 p-5 flex flex-col gap-5">
@@ -184,43 +523,86 @@
                     <span class="ml-1">{(displayTicker?.changeAmount ?? 0) >= 0 ? "↗" : "↘"} {Math.abs(displayTicker?.changePercent ?? 0).toFixed(2)}%</span>
                   </span>
                 </div>
-                <span class="text-[11px] text-slate-400 font-mono mt-1">Live 1-Minute Snapshot</span>
+                <span class="text-[11px] text-slate-400 font-mono mt-1">{detailCaption}</span>
               </div>
 
               <!-- Timeframes -->
               <div class="flex flex-wrap gap-4 items-center justify-between border-b border-white/5 pb-4">
                 <div class="flex items-center bg-white/5 border border-white/5 rounded-lg p-1 text-xs font-semibold text-slate-400">
-                  <button class="px-3 py-1.5 bg-[#2a2a35] text-white rounded-md shadow-sm">1D</button>
-                  <button class="px-3 py-1.5 hover:text-white transition-colors rounded-md">5D</button>
-                  <button class="px-3 py-1.5 hover:text-white transition-colors rounded-md">1M</button>
-                  <button class="px-3 py-1.5 hover:text-white transition-colors rounded-md">6M</button>
-                  <button class="px-3 py-1.5 hover:text-white transition-colors rounded-md">YTD</button>
-                  <button class="px-3 py-1.5 hover:text-white transition-colors rounded-md">1Y</button>
+                  {#each TIMEFRAME_OPTIONS as range}
+                    <button
+                      on:click={() => handleRangeChange(range)}
+                      class="px-3 py-1.5 rounded-md transition-colors {activeRange === range ? 'bg-[#2a2a35] text-white shadow-sm' : 'hover:text-white'}"
+                      disabled={detailLoading && activeRange === range}
+                    >
+                      {range}
+                    </button>
+                  {/each}
                 </div>
-                <button class="bg-white/5 border border-white/5 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-white/10 transition-colors flex items-center gap-1">
-                  Compare <span class="text-[10px] opacity-70">▼</span>
+                <button
+                  on:click={toggleCompareOverlay}
+                  class="bg-white/5 border border-white/5 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-white/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 {compareEnabled ? 'border-[#38bdf8]/30 text-white bg-[#38bdf8]/10' : ''}"
+                  disabled={detailLoading || compareLoading}
+                >
+                  {compareButtonLabel}
                 </button>
               </div>
 
               <!-- SVG Chart -->
               <div class="h-48 border border-white/5 bg-gradient-to-b from-[#111118] to-transparent rounded-lg relative flex flex-col overflow-hidden">
-                {#if displayTicker?.meta && displayTicker?.data?.length}
-                  <div class="absolute top-1/2 left-0 right-0 border-t border-dashed border-white/20 z-0"></div>
-                  <div class="absolute top-1/2 right-4 -translate-y-1/2 bg-black/80 text-white/50 text-[10px] px-2 py-0.5 rounded-full border border-white/10 z-10 font-mono shadow-md">
-                    Prev close: ${(displayTicker.meta.prevClose || (displayTicker.price - displayTicker.changeAmount)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {#if chartLines.length > 0 && chartLines[0].data.length > 0}
+                  <div class="absolute left-0 right-0 border-t border-dashed border-white/20 z-0" style={`top: ${baselineTop}%;`}></div>
+                  <div class="absolute right-4 -translate-y-1/2 bg-black/80 text-white/50 text-[10px] px-2 py-0.5 rounded-full border border-white/10 z-10 font-mono shadow-md" style={`top: ${baselineTop}%;`}>
+                    {baselineLabel}
+                  </div>
+                {/if}
+                {#if detailLoading}
+                  <div class="absolute inset-0 z-20 bg-[#111118]/70 backdrop-blur-[1px] flex items-center justify-center text-[11px] text-slate-300 font-mono tracking-wide">
+                    Loading {activeRange}...
                   </div>
                 {/if}
                 <div class="flex-1 flex items-end z-10 overflow-hidden opacity-80">
-                  <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 1000 250">
-                    <path d={getSvgPath(displayTicker?.data ?? [], true)}
-                          fill={(displayTicker?.changeAmount ?? 0) >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)"} />
-                    <path d={getSvgPath(displayTicker?.data ?? [], false)}
+                  {#if chartLines.length > 0 && chartLines[0].data.length > 0}
+                    <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 1000 250">
+                      {#each chartLines as line}
+                        {#if line.fill}
+                          <path
+                            d={getSvgPath(line.data, chartBounds.min, chartBounds.max, true)}
+                            fill={primaryAreaFill}
+                          />
+                        {/if}
+                      {/each}
+                      {#each chartLines as line}
+                        <path
+                          d={getSvgPath(line.data, chartBounds.min, chartBounds.max, false)}
                           fill="none"
-                          stroke={(displayTicker?.changeAmount ?? 0) >= 0 ? "#4ade80" : "#f87171"}
-                          stroke-width="2" />
-                  </svg>
+                          stroke={line.color}
+                          stroke-width={line.key === displayTicker?.symbol ? 2.4 : 2}
+                          stroke-linecap="round"
+                        />
+                      {/each}
+                    </svg>
+                  {:else if detailError}
+                    <div class="flex h-full w-full items-center justify-center text-xs text-slate-500 font-mono px-4 text-center">
+                      {detailError}
+                    </div>
+                  {/if}
                 </div>
               </div>
+
+              {#if compareEnabled && chartLines.length > 1}
+                <div class="flex flex-wrap gap-2 -mt-2">
+                  {#each chartLines as line}
+                    <div class="inline-flex items-center gap-2 bg-white/5 border border-white/5 rounded-full px-3 py-1 text-[11px] text-slate-300">
+                      <span class="w-2 h-2 rounded-full shrink-0" style={`background-color: ${line.color};`}></span>
+                      <span>{line.name}</span>
+                      <span class={line.changePercent >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}>
+                        {line.changePercent >= 0 ? '+' : ''}{line.changePercent.toFixed(2)}%
+                      </span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
 
               <!-- Metrics Grid -->
               <div class="grid grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-[13px] pt-4 border-t border-white/5">
@@ -231,11 +613,11 @@
                 </div>
                 <div class="flex flex-col gap-3">
                   <div class="flex justify-between border-b border-white/5 pb-2"><span class="text-slate-400">Volume</span><span class="font-medium text-white font-mono">{formatVolume(displayTicker?.meta?.volume)}</span></div>
-                  <div class="flex justify-between border-b border-white/5 pb-2"><span class="text-slate-400">Low</span><span class="font-medium text-white font-mono">${(displayTicker?.meta?.low ?? displayTicker?.price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                  <div class="flex justify-between border-b border-white/5 pb-2"><span class="text-slate-400">{lowMetricLabel}</span><span class="font-medium text-white font-mono">${(displayTicker?.meta?.low ?? displayTicker?.price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
                   <div class="flex justify-between pb-2"></div>
                 </div>
                 <div class="flex-col gap-3 hidden lg:flex">
-                  <div class="flex justify-between border-b border-white/5 pb-2"><span class="text-slate-400">High</span><span class="font-medium text-white font-mono">${(displayTicker?.meta?.high ?? displayTicker?.price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+                  <div class="flex justify-between border-b border-white/5 pb-2"><span class="text-slate-400">{highMetricLabel}</span><span class="font-medium text-white font-mono">${(displayTicker?.meta?.high ?? displayTicker?.price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
                   <div class="flex justify-between border-b border-white/5 pb-2"><span class="text-slate-400">Year High</span><span class="font-medium text-white font-mono">${(displayTicker?.meta?.yearHigh ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
                   <div class="flex justify-between pb-2"></div>
                 </div>
